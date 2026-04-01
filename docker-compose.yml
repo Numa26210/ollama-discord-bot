@@ -1,0 +1,139 @@
+version: '3.9'
+
+services:
+  # PostgreSQL Database
+  db:
+    image: postgres:15-alpine
+    container_name: discord-bot-db
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER:-discord_bot}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-discord_bot_secret}
+      - POSTGRES_DB=${POSTGRES_DB:-discord_bot_db}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - discord-bot-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-discord_bot} -d ${POSTGRES_DB:-discord_bot_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+
+  # Ollama AI Service (external LLM server)
+  ollama:
+    image: ollama/ollama:latest
+    container_name: discord-bot-ollama
+    ports:
+      - "11434:11434"
+    environment:
+      - OLLAMA_HOST=0.0.0.0:11434
+    volumes:
+      - ollama_data:/root/.ollama
+    networks:
+      - discord-bot-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    pull_policy: always
+
+  # FastAPI Backend Service
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    container_name: discord-bot-api
+    ports:
+      - "8000:8000"
+    environment:
+      - DISCORD_TOKEN=${DISCORD_TOKEN}
+      - OLLAMA_API_URL=http://ollama:11434
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-discord_bot}:${POSTGRES_PASSWORD:-discord_bot_secret}@db:5432/${POSTGRES_DB:-discord_bot_db}
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-http://localhost:3000}
+      - API_KEY=${API_KEY:-}
+      - LOG_LEVEL=INFO
+    volumes:
+      - ./backend:/app/backend
+    networks:
+      - discord-bot-network
+    depends_on:
+      db:
+        condition: service_healthy
+      ollama:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=10)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+
+  # Discord Bot Service
+  bot:
+    build:
+      context: .
+      dockerfile: Dockerfile.bot
+    container_name: discord-bot
+    environment:
+      - DISCORD_TOKEN=${DISCORD_TOKEN}
+      - OLLAMA_API_URL=http://ollama:11434
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-discord_bot}:${POSTGRES_PASSWORD:-discord_bot_secret}@db:5432/${POSTGRES_DB:-discord_bot_db}
+      - LOG_LEVEL=INFO
+    volumes:
+      - ./bot:/app/bot
+      - ./backend:/app/backend
+      - bot_logs:/app/logs
+    networks:
+      - discord-bot-network
+    depends_on:
+      db:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
+      ollama:
+        condition: service_healthy
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # React Frontend (optional, can be deployed separately)
+  frontend:
+    image: node:18-alpine
+    container_name: discord-bot-dashboard
+    working_dir: /app
+    command: npm run dev -- --host 0.0.0.0 --port 3000
+    ports:
+      - "3000:3000"
+    environment:
+      - VITE_API_URL=http://localhost:8000/api
+      - VITE_SERVER_ID=${VITE_SERVER_ID:-1}
+      - VITE_REFRESH_INTERVAL=30000
+      - VITE_API_KEY=${API_KEY:-}
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    networks:
+      - discord-bot-network
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+networks:
+  discord-bot-network:
+    driver: bridge
+
+volumes:
+  ollama_data:
+    driver: local
+  postgres_data:
+    driver: local
+  bot_logs:
+    driver: local

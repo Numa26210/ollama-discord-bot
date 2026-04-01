@@ -1,0 +1,22 @@
+# Backend Dependencies
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+sqlalchemy==2.0.23
+psycopg2-binary==2.9.9
+python-dotenv==1.0.0
+pydantic==2.4.2
+pydantic-settings==2.0.3
+aiohttp==3.9.1
+
+# Discord Bot
+discord.py==2.3.2
+python-dateutil==2.8.2
+
+# Database
+alembic==1.12.1
+
+# CORS
+fastapi-cors==0.0.6
+
+# Utils
+requests==2.31.0

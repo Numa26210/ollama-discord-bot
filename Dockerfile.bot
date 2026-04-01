@@ -1,0 +1,32 @@
+# Discord Bot Docker Container
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Set environment variables
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy requirements first for better caching
+COPY requirements.txt .
+
+# Install Python dependencies
+RUN pip install --upgrade pip setuptools wheel && \
+    pip install -r requirements.txt
+
+# Copy application code
+COPY bot/ ./bot/
+COPY backend/ ./backend/
+COPY .env .env 2>/dev/null || true
+
+# Create log directory
+RUN mkdir -p /app/logs
+
+# Run the bot
+CMD ["python", "bot/run_bot.py"]
