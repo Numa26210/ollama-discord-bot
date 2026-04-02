@@ -1,14 +1,13 @@
 @echo off
-chcp 65001 >nul 2>&1
 title Ollama Discord Bot - Launcher
 
-echo ╔══════════════════════════════════════════════╗
-echo ║       Ollama Discord Bot - Launcher          ║
-echo ╠══════════════════════════════════════════════╣
-echo ║  1. Backend API    (port 8000)               ║
-echo ║  2. Discord Bot                              ║
-echo ║  3. Frontend       (port 3000)               ║
-echo ╚══════════════════════════════════════════════╝
+echo ==============================================
+echo        Ollama Discord Bot - Launcher
+echo ==============================================
+echo   1. Backend API    (port 8000)
+echo   2. Discord Bot
+echo   3. Frontend       (port 3000)
+echo ==============================================
 echo.
 
 cd /d "%~dp0"
@@ -47,7 +46,7 @@ start "Ollama Discord Bot - Frontend" cmd /k "cd /d "%~dp0\frontend" && npm run 
 timeout /t 3 /nobreak >nul
 
 echo.
-echo ✅ Tout est lance !
+echo Tout est lance !
 echo.
 echo   Backend  : http://localhost:8000
 echo   Frontend : http://localhost:3000
