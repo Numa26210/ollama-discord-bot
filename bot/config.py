@@ -11,6 +11,10 @@ load_dotenv()
 
 # ==================== LOGGING CONFIGURATION ====================
 
+# Absolute path to bot.log inside the bot/ directory
+_BOT_LOG_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "bot.log")
+
+
 def setup_logging(level: str = "INFO"):
     """Configure logging for the bot"""
     import sys
@@ -22,7 +26,7 @@ def setup_logging(level: str = "INFO"):
         level=log_level,
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
         handlers=[
-            logging.FileHandler('bot.log', encoding='utf-8'),
+            logging.FileHandler(_BOT_LOG_PATH, encoding='utf-8'),
             stream_handler
         ]
     )

@@ -31,7 +31,7 @@ import logging
 from datetime import datetime
 from discord.ext import commands
 
-from config import BotConfig, split_message, is_mention, extract_mention_context
+from config import BotConfig, setup_logging, split_message, is_mention, extract_mention_context
 from ollama_client import OllamaClient
 from message_logger import MessageLogger
 
@@ -96,6 +96,17 @@ class DiscordAIBot(commands.Cog):
             timeout=BotConfig.OLLAMA_TIMEOUT
         )
         await self.ollama_client.open_session()
+
+        # Quick Ollama health check
+        healthy = await self.ollama_client.health_check()
+        if healthy:
+            logger.info(f"✅ Ollama connecté ({BotConfig.OLLAMA_API_URL}, modèle: {BotConfig.OLLAMA_MODEL})")
+        else:
+            logger.warning(
+                f"⚠️ Ollama injoignable à {BotConfig.OLLAMA_API_URL} — "
+                f"les commandes IA ne fonctionneront pas. "
+                f"Lance Ollama avec 'ollama serve' et pull le modèle avec 'ollama pull {BotConfig.OLLAMA_MODEL}'"
+            )
         
         # Change bot status
         await self.bot.change_presence(
@@ -132,7 +143,8 @@ class DiscordAIBot(commands.Cog):
         async with ctx.typing():
             response = await self._get_ai_response(question)
             if not response:
-                await ctx.reply("❌ Impossible de générer une réponse. Réessaie plus tard.", mention_author=False)
+                hint = self._ollama_error_hint()
+                await ctx.reply(f"❌ Impossible de générer une réponse.\n\n{hint}", mention_author=False)
                 return
 
             for part in split_message(response):
@@ -180,7 +192,8 @@ class DiscordAIBot(commands.Cog):
             )
             response = await self._get_ai_response(prompt)
             if not response:
-                await ctx.reply("❌ Impossible de générer le résumé.", mention_author=False)
+                hint = self._ollama_error_hint()
+                await ctx.reply(f"❌ Impossible de générer le résumé.\n\n{hint}", mention_author=False)
                 return
 
             header = f"📝 **Résumé des {len(messages)} derniers messages :**\n\n"
@@ -335,8 +348,9 @@ class DiscordAIBot(commands.Cog):
                 
                 if not response:
                     logger.warning("Ollama returned empty response")
+                    hint = self._ollama_error_hint()
                     await message.reply(
-                        "❌ Sorry, I couldn't generate a response. Please try again.",
+                        f"❌ Impossible de générer une réponse.\n\n{hint}",
                         mention_author=False
                     )
                     return
@@ -463,6 +477,17 @@ class DiscordAIBot(commands.Cog):
             logger.error(f"Error getting AI response: {str(e)}")
             return ""
 
+    def _ollama_error_hint(self) -> str:
+        """Return a user-friendly hint when Ollama fails."""
+        url = BotConfig.OLLAMA_API_URL
+        model = self.ollama_client.model if self.ollama_client else BotConfig.OLLAMA_MODEL
+        return (
+            f"**Causes possibles :**\n"
+            f"• Ollama n'est pas lancé → `ollama serve`\n"
+            f"• Le modèle **{model}** n'est pas téléchargé → `ollama pull {model}`\n"
+            f"• Mauvaise URL Ollama dans `.env` (actuellement `{url}`)"
+        )
+
 
 def create_bot() -> commands.Bot:
     """
@@ -492,6 +517,9 @@ def run_bot():
     """
     Main entry point - run the Discord bot
     """
+    # Set up logging (creates bot.log file)
+    setup_logging(BotConfig.LOG_LEVEL)
+
     # Validate configuration
     if not BotConfig.validate():
         logger.error("Configuration validation failed")
