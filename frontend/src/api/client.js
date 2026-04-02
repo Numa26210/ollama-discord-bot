@@ -58,6 +58,9 @@ export const botAPI = {
     }, {
       headers: API_KEY ? { 'X-API-Key': API_KEY } : {},
     }),
+
+  getServers: () =>
+    client.get('/bot/servers'),
 }
 
 export const settingsAPI = {

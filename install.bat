@@ -58,6 +58,18 @@ echo.
 :: Termine
 echo ==============================================
 echo   Installation terminee avec succes !
+echo ==============================================
+echo.
+if not exist ".env" (
+    echo [INFO] Fichier .env manquant.
+    echo        Copie .env.example vers .env ...
+    copy .env.example .env >nul
+    echo        IMPORTANT: Ouvre .env et renseigne ton DISCORD_TOKEN.
+    echo.
+)
+if not exist "frontend\.env" (
+    copy frontend\.env.example frontend\.env >nul
+)
 echo   Lance start.bat pour demarrer le projet.
 echo ==============================================
 pause

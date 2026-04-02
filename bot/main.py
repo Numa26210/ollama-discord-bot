@@ -35,6 +35,10 @@ from config import BotConfig, split_message, is_mention, extract_mention_context
 from ollama_client import OllamaClient
 from message_logger import MessageLogger
 
+# Ensure database tables exist (idempotent — safe to call even if backend already ran)
+from app.database import init_db
+init_db()
+
 logger = logging.getLogger(__name__)
 
 
@@ -69,6 +73,21 @@ class DiscordAIBot(commands.Cog):
         logger.info(f"✅ Bot logged in as {self.bot.user.name}")
         logger.info(f"Bot ID: {self.bot.user.id}")
         logger.info(f"Connected to {len(self.bot.guilds)} server(s)")
+        
+        # Register all connected servers in the DB so the dashboard sees them immediately
+        for guild in self.bot.guilds:
+            try:
+                def _register(gid=str(guild.id), gname=guild.name):
+                    from app.database import SessionLocal
+                    db = SessionLocal()
+                    try:
+                        self.logger.ensure_server(db, gid, gname)
+                        db.commit()
+                    finally:
+                        db.close()
+                await asyncio.to_thread(_register)
+            except Exception as e:
+                logger.warning(f"Could not register server {guild.name}: {e}")
         
         # Initialize Ollama client with persistent session
         self.ollama_client = OllamaClient(

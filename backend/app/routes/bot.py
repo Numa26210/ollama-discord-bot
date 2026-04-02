@@ -2,6 +2,7 @@
 FastAPI routes for bot management endpoints
 """
 import os
+from typing import List
 from fastapi import APIRouter, Depends, Header, HTTPException, status
 from sqlalchemy.orm import Session
 from datetime import datetime
@@ -104,3 +105,20 @@ def get_bot_status(
         message=f"Bot is currently {'active' if server.is_active else 'inactive'}",
         timestamp=datetime.utcnow()
     )
+
+
+@router.get("/servers", tags=["bot management"])
+def list_servers(db: Session = Depends(get_db)):
+    """
+    List all known Discord servers.
+    Used by the frontend to auto-detect the server ID on fresh installs.
+    """
+    servers = db.query(Server).order_by(Server.created_at.desc()).all()
+    return [
+        {
+            "id": s.id,
+            "name": s.name,
+            "is_active": s.is_active,
+        }
+        for s in servers
+    ]
