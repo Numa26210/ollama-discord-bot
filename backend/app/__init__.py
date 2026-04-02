@@ -2,11 +2,14 @@
 Discord Bot Backend - Main application initialization
 """
 import os
+import logging
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.database import init_db
 from app.routes import stats, bot, settings, tools, logs, quotas, workflows, executions, commands, automations, diagnostics
+
+logger = logging.getLogger(__name__)
 
 # Allowed frontend origins (comma-separated via env, with sensible defaults)
 ALLOWED_ORIGINS = os.getenv(
@@ -19,7 +22,7 @@ ALLOWED_ORIGINS = os.getenv(
 async def lifespan(app: FastAPI):
     """Application lifespan: startup and shutdown events."""
     init_db()
-    print("✓ Database initialized successfully")
+    logger.info("Database initialized successfully")
     yield
 
 
