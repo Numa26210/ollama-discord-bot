@@ -32,7 +32,7 @@ from datetime import datetime
 from discord.ext import commands
 
 from config import BotConfig, setup_logging, split_message, is_mention, extract_mention_context
-from ollama_client import OllamaClient
+from ollama_client import OllamaClient, OllamaResponse
 from message_logger import MessageLogger
 
 # Ensure database tables exist (idempotent — safe to call even if backend already ran)
@@ -141,14 +141,13 @@ class DiscordAIBot(commands.Cog):
             return
 
         async with ctx.typing():
-            response = await self._get_ai_response(question)
-            if not response:
+            ai_resp = await self._get_ai_response(question)
+            if not ai_resp:
                 hint = self._ollama_error_hint()
                 await ctx.reply(f"❌ Impossible de générer une réponse.\n\n{hint}", mention_author=False)
                 return
 
-            for part in split_message(response):
-                await ctx.reply(part, mention_author=False)
+            await self._send_ai_reply(ctx.message, ai_resp)
 
         # Log as AI-triggered
         if ctx.guild:
@@ -190,15 +189,15 @@ class DiscordAIBot(commands.Cog):
                 f"Résume de manière concise la conversation Discord suivante "
                 f"({len(messages)} messages). Réponds en français :\n\n{conversation}"
             )
-            response = await self._get_ai_response(prompt)
-            if not response:
+            ai_resp = await self._get_ai_response(prompt)
+            if not ai_resp:
                 hint = self._ollama_error_hint()
                 await ctx.reply(f"❌ Impossible de générer le résumé.\n\n{hint}", mention_author=False)
                 return
 
             header = f"📝 **Résumé des {len(messages)} derniers messages :**\n\n"
-            for part in split_message(header + response):
-                await ctx.reply(part, mention_author=False)
+            ai_resp.text = header + ai_resp.text
+            await self._send_ai_reply(ctx.message, ai_resp)
 
     @commands.command(name="model")
     @commands.cooldown(1, 3, commands.BucketType.user)
@@ -344,9 +343,9 @@ class DiscordAIBot(commands.Cog):
                 logger.debug(f"Query to Ollama: {query[:100]}...")
                 
                 # Get response from Ollama
-                response = await self._get_ai_response(query)
+                ai_resp = await self._get_ai_response(query)
                 
-                if not response:
+                if not ai_resp:
                     logger.warning("Ollama returned empty response")
                     hint = self._ollama_error_hint()
                     await message.reply(
@@ -366,23 +365,9 @@ class DiscordAIBot(commands.Cog):
                     channel_name=channel_name,
                     timestamp=response_timestamp,
                 )
-                
-                # Split message if too long
-                response_parts = split_message(response)
-                
-                logger.info(
-                    f"📤 Sending response ({len(response_parts)} part(s)) "
-                    f"to {username}"
-                )
-                
-                # Send response parts
-                for i, part in enumerate(response_parts):
-                    if i == 0:
-                        # First message as reply to original
-                        await message.reply(part, mention_author=False)
-                    else:
-                        # Subsequent parts as regular messages
-                        await message.channel.send(part)
+
+                # ── Two-phase display for thinking models ──
+                await self._send_ai_reply(message, ai_resp)
                 
                 logger.info(f"✅ Response sent to {username}")
         
@@ -450,13 +435,14 @@ class DiscordAIBot(commands.Cog):
             logger.error(f"Error checking bot status: {str(e)}")
             return True  # Default to True on error
     
-    async def _get_ai_response(self, prompt: str) -> str:
+    async def _get_ai_response(self, prompt: str):
         """
         Get response from Ollama AI using the persistent session.
+        Returns OllamaResponse (with .text and .thinking) or None.
         """
         if not self.ollama_client or not self.ollama_client.session:
             logger.error("Ollama client not initialized")
-            return ""
+            return None
         
         try:
             system_prompt = (
@@ -466,16 +452,15 @@ class DiscordAIBot(commands.Cog):
             )
             full_prompt = f"{system_prompt}\n\nUser: {prompt}"
 
-            response = await self.ollama_client.generate(
+            return await self.ollama_client.generate(
                 prompt=full_prompt,
                 max_tokens=BotConfig.RESPONSE_MAX_TOKENS,
                 temperature=BotConfig.RESPONSE_TEMPERATURE
             )
-            return response or ""
 
         except Exception as e:
             logger.error(f"Error getting AI response: {str(e)}")
-            return ""
+            return None
 
     def _ollama_error_hint(self) -> str:
         """Return a user-friendly hint when Ollama fails."""
@@ -487,6 +472,29 @@ class DiscordAIBot(commands.Cog):
             f"• Le modèle **{model}** n'est pas téléchargé → `ollama pull {model}`\n"
             f"• Mauvaise URL Ollama dans `.env` (actuellement `{url}`)"
         )
+
+    async def _send_ai_reply(self, message: discord.Message, ai_resp: OllamaResponse):
+        """Send an OllamaResponse as a Discord reply, with thinking → edit flow."""
+        if ai_resp.thinking:
+            thinking_preview = ai_resp.thinking[:1500]
+            if len(ai_resp.thinking) > 1500:
+                thinking_preview += "…"
+            sent = await message.reply(
+                f"🧠 **Réflexion…**\n>>> {thinking_preview}",
+                mention_author=False
+            )
+            await asyncio.sleep(min(len(ai_resp.thinking) / 200, 4))
+            final_parts = split_message(ai_resp.text)
+            await sent.edit(content=final_parts[0])
+            for extra in final_parts[1:]:
+                await message.channel.send(extra)
+        else:
+            parts = split_message(ai_resp.text)
+            for i, part in enumerate(parts):
+                if i == 0:
+                    await message.reply(part, mention_author=False)
+                else:
+                    await message.channel.send(part)
 
 
 def create_bot() -> commands.Bot:

@@ -5,10 +5,18 @@ Manages asynchronous communication with Ollama API
 import aiohttp
 import asyncio
 import logging
+from dataclasses import dataclass
 from typing import Optional
 from datetime import datetime
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class OllamaResponse:
+    """Holds both the final answer and optional thinking/reasoning."""
+    text: str
+    thinking: Optional[str] = None
 
 
 class OllamaClient:
@@ -54,18 +62,12 @@ class OllamaClient:
         max_tokens: int = 256,
         temperature: float = 0.7,
         top_p: float = 0.9
-    ) -> Optional[str]:
+    ) -> Optional[OllamaResponse]:
         """
         Generate response from Ollama
         
-        Args:
-            prompt: Input prompt for the model
-            max_tokens: Maximum tokens to generate (approximate)
-            temperature: Temperature for generation (0.0-2.0)
-            top_p: Top-p for nucleus sampling
-        
         Returns:
-            Generated text or None if error occurred
+            OllamaResponse with .text (final answer) and .thinking (reasoning, may be None)
         """
         if not self.session:
             logger.error("Session not initialized. Use 'async with OllamaClient(...) as client:'")
@@ -75,6 +77,7 @@ class OllamaClient:
             "model": self.model,
             "prompt": prompt,
             "stream": False,
+            "think": True,
             "options": {
                 "temperature": temperature,
                 "top_p": top_p,
@@ -101,16 +104,26 @@ class OllamaClient:
                     return None
                 
                 data = await response.json()
-                generated_text = data.get("response", "").strip()
-                
-                if not generated_text:
-                    logger.warning(f"Ollama returned empty 'response' field. Full payload keys: {list(data.keys())}")
+                answer = data.get("response", "").strip()
+                thinking = data.get("thinking", "").strip() or None
+
+                # Thinking models: if response is empty, the answer is in thinking
+                if not answer and thinking:
+                    answer = thinking
+                    thinking = None
+                    logger.info("Model returned content only in 'thinking' field")
+
+                if not answer:
+                    logger.warning(f"Ollama returned empty response. Keys: {list(data.keys())}")
                     if data.get("error"):
-                        logger.error(f"Ollama error field: {data['error']}")
+                        logger.error(f"Ollama error: {data['error']}")
                     return None
 
-                logger.info(f"Ollama response received: {len(generated_text)} chars")
-                return generated_text
+                logger.info(
+                    f"Ollama response received: {len(answer)} chars"
+                    + (f" + {len(thinking)} chars thinking" if thinking else "")
+                )
+                return OllamaResponse(text=answer, thinking=thinking)
                 
         except asyncio.TimeoutError:
             logger.error(f"Ollama request timeout after {self.timeout}s")
