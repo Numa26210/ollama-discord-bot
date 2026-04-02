@@ -28,7 +28,8 @@ def setup_logging(level: str = "INFO"):
         handlers=[
             logging.FileHandler(_BOT_LOG_PATH, encoding='utf-8'),
             stream_handler
-        ]
+        ],
+        force=True,  # override any earlier basicConfig call (e.g. from run_bot.py)
     )
 
 
@@ -53,7 +54,7 @@ class BotConfig:
     
     # Bot behavior
     COMMAND_PREFIX = os.getenv("COMMAND_PREFIX", "!")
-    RESPONSE_MAX_TOKENS = int(os.getenv("RESPONSE_MAX_TOKENS", "256"))
+    RESPONSE_MAX_TOKENS = int(os.getenv("RESPONSE_MAX_TOKENS", "512"))
     RESPONSE_TEMPERATURE = float(os.getenv("RESPONSE_TEMPERATURE", "0.7"))
     
     # Channels and features

@@ -81,7 +81,10 @@ class OllamaClient:
             "options": {
                 "temperature": temperature,
                 "top_p": top_p,
-                "num_predict": max_tokens,
+                # num_predict caps the TOTAL output (thinking + response).
+                # Thinking models need much more room so the actual answer
+                # isn't truncated. We multiply by 4 to give headroom.
+                "num_predict": max_tokens * 4,
             }
         }
         
