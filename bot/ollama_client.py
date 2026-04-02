@@ -85,7 +85,7 @@ class OllamaClient:
         try:
             url = f"{self.base_url}/api/generate"
             
-            logger.debug(f"Calling Ollama: {url} with model {self.model}")
+            logger.info(f"Calling Ollama: {url} with model {self.model}")
             
             timeout = aiohttp.ClientTimeout(total=self.timeout)
             async with self.session.post(
@@ -94,17 +94,32 @@ class OllamaClient:
                 timeout=timeout
             ) as response:
                 if response.status != 200:
-                    logger.error(f"Ollama API error: {response.status}")
+                    body = await response.text()
+                    logger.error(
+                        f"Ollama API error {response.status}: {body[:500]}"
+                    )
                     return None
                 
                 data = await response.json()
                 generated_text = data.get("response", "").strip()
                 
-                logger.debug(f"Ollama response received: {len(generated_text)} chars")
-                return generated_text if generated_text else None
+                if not generated_text:
+                    logger.warning(f"Ollama returned empty 'response' field. Full payload keys: {list(data.keys())}")
+                    if data.get("error"):
+                        logger.error(f"Ollama error field: {data['error']}")
+                    return None
+
+                logger.info(f"Ollama response received: {len(generated_text)} chars")
+                return generated_text
                 
         except asyncio.TimeoutError:
             logger.error(f"Ollama request timeout after {self.timeout}s")
+            return None
+        except aiohttp.ClientConnectorError as e:
+            logger.error(
+                f"Ollama connection refused at {self.base_url} — "
+                f"is Ollama running? Start it with 'ollama serve'. Detail: {e}"
+            )
             return None
         except aiohttp.ClientError as e:
             logger.error(f"Ollama connection error: {str(e)}")
