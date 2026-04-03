@@ -445,15 +445,9 @@ class DiscordAIBot(commands.Cog):
             return None
         
         try:
-            system_prompt = (
-                "You are a helpful Discord bot assistant. "
-                "Keep responses concise (under 200 words). "
-                "Be friendly and conversational."
-            )
-            full_prompt = f"{system_prompt}\n\nUser: {prompt}"
-
             return await self.ollama_client.generate(
-                prompt=full_prompt,
+                prompt=prompt,
+                system=BotConfig.SYSTEM_PROMPT,
                 max_tokens=BotConfig.RESPONSE_MAX_TOKENS,
                 temperature=BotConfig.RESPONSE_TEMPERATURE
             )

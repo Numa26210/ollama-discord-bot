@@ -59,6 +59,7 @@ class OllamaClient:
     async def generate(
         self,
         prompt: str,
+        system: str = "",
         max_tokens: int = 256,
         temperature: float = 0.7,
         top_p: float = 0.9
@@ -87,6 +88,8 @@ class OllamaClient:
                 "num_predict": max_tokens * 4,
             }
         }
+        if system:
+            payload["system"] = system
         
         try:
             url = f"{self.base_url}/api/generate"

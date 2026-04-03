@@ -56,6 +56,7 @@ class BotConfig:
     COMMAND_PREFIX = os.getenv("COMMAND_PREFIX", "!")
     RESPONSE_MAX_TOKENS = int(os.getenv("RESPONSE_MAX_TOKENS", "512"))
     RESPONSE_TEMPERATURE = float(os.getenv("RESPONSE_TEMPERATURE", "0.7"))
+    SYSTEM_PROMPT = os.getenv("SYSTEM_PROMPT", "Tu es un assistant Discord utile et amical.")
     
     # Channels and features
     ALLOWED_CHANNEL_IDS: List[str] = []  # Empty = all channels
